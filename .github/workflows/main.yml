@@ -1,0 +1,88 @@
+name: CI/CD Pipeline
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up JDK
+      uses: actions/setup-java@v2
+      with:
+        distribution: 'adopt'
+        java-version: '11'
+
+    - name: Build with Gradle
+      run: ./gradlew build
+
+  test:
+    needs: build
+    runs-on: ubuntu-latest
+
+    services:
+      zaproxy:
+        image: owasp/zap2docker-stable
+        ports:
+          - 8090:8090
+        options: --read-only
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up JDK
+      uses: actions/setup-java@v2
+      with:
+        distribution: 'adopt'
+        java-version: '11'
+
+    - name: Run DAST with OWASP ZAP
+      run: docker run --network host owasp/zap2docker-stable zap-baseline.py -t <TARGET_URL> -J <REPORT_JSON>
+
+  sast:
+    needs: build
+    runs-on: ubuntu-latest
+
+    services:
+      sonarqube:
+        image: sonarqube:latest
+        ports:
+          - 9000:9000
+        options: --read-only
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up JDK
+      uses: actions/setup-java@v2
+      with:
+        distribution: 'adopt'
+        java-version: '11'
+
+    - name: Run SAST with SonarQube
+      run: ./gradlew sonarqube -Dsonar.host.url=http://localhost:9000 -Dsonar.login=$SONAR_TOKEN
+
+  functional_test:
+    needs: build
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v2
+
+    - name: Set up JDK
+      uses: actions/setup-java@v2
+      with:
+        distribution: 'adopt'
+        java-version: '11'
+
+    - name: Run Android Tests with Espresso
+      run: ./gradlew connectedCheck
